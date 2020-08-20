@@ -1,5 +1,5 @@
 ## Livox Detection: trained based on LivoxDataset_v1.0 [\[LivoxDataset\]](https://www.livoxtech.com/cn/dataset)
-The detector can run at least 90 FPS on 2080TI. The provided model was trained on LivoxDataset_v1.0 within 1w pointcloud sequence.
+The detector can run at least 90 FPS on 2080TI. The provided model was trained on LivoxDataset_v1.0 within 1w pointcloud frames.
 
 ## Demo
 highway_scene:
