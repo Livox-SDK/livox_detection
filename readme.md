@@ -39,11 +39,11 @@ $ mkdir build && cd build
 $ cmake -DCMAKE_BUILD_TYPE=Release ..
 $ make
 ```
-4. copy the `lib_cpp.so` to root directory:
+4. Copy the `lib_cpp.so` to root directory:
 ```bash
 $ cp lib_cpp.so ../../../
 ```
-5. download the [pre_trained model](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Showcase/model.zip) and unzip it to the root directory.
+5. Download the [pre_trained model](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Showcase/model.zip) and unzip it to the root directory.
 
 # Run
 
