@@ -113,7 +113,7 @@ class Detector(object):
         for line in datapath:
             Z = float(line[0])
             X = -1.0*float(line[1])
-            Y = -1.0*float(line[2])
+            Y = -1.0*float(line[2]-1.9) #注意此处的地面高度应该为-1.9m处
             if(X > cfg.RANGE['Y_MIN'] and X < cfg.RANGE['Y_MAX'] and
                Z > cfg.RANGE['X_MIN'] and Z < cfg.RANGE['X_MAX'] and
                Y > cfg.RANGE['Z_MIN'] and Y < cfg.RANGE['Z_MAX']):
