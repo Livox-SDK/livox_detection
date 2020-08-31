@@ -113,7 +113,7 @@ class Detector(object):
         for line in datapath:
             Z = float(line[0])
             X = -1.0*float(line[1])
-            Y = -1.0*float(line[2]-1.9) #注意此处的地面高度应该为-1.9m处
+            Y = -1.0*float(line[2]) #注意此处的地面高度应该为-1.9m处
             if(X > cfg.RANGE['Y_MIN'] and X < cfg.RANGE['Y_MAX'] and
                Z > cfg.RANGE['X_MIN'] and Z < cfg.RANGE['X_MAX'] and
                Y > cfg.RANGE['Z_MIN'] and Y < cfg.RANGE['Z_MAX']):
@@ -179,6 +179,7 @@ class Detector(object):
                 continue
             if point[0] < 2.0 and np.abs(point[1]) < 1.5:
                 continue
+            point[2] -= 1.9 #此处将地面高度修正到-1.9m处
             points_list.append(point)
         points_list = np.asarray(points_list)
         pointcloud_msg = pcl2.create_cloud_xyz32(header, points_list[:, 0:3])
@@ -286,6 +287,7 @@ class Detector(object):
                 marker_array_text.markers.append(marker1)
         mnum = len(boxes)
         self.marker_pub.publish(marker_array)
+        self.marker_text_pub.publish(marker_array_text)
         self.pointcloud_pub.publish(pointcloud_msg)
 
 
