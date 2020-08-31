@@ -179,7 +179,7 @@ class Detector(object):
                 continue
             if point[0] < 2.0 and np.abs(point[1]) < 1.5:
                 continue
-            point[2] -= 1.9 #此处将地面高度修正到-1.9m处
+            #point[2] -= 1.9 #此处将地面高度修正到-1.9m处
             points_list.append(point)
         points_list = np.asarray(points_list)
         pointcloud_msg = pcl2.create_cloud_xyz32(header, points_list[:, 0:3])
