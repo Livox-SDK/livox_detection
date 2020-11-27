@@ -1,23 +1,22 @@
-## Livox Detection: trained based on LivoxDataset_v1.0 [\[LivoxDataset\]](https://www.livoxtech.com/cn/dataset)
-The detector can run at least 90 FPS on 2080TI. The provided model was trained on LivoxDataset_v1.0 within 10k pointcloud frames.
+## Livox Detection V1.1: trained based on LivoxDataset_v1.0 [\[LivoxDataset\]](https://www.livoxtech.com/cn/dataset)
+The detector can run at least 20 FPS on 2080TI for 200m*100m range detection. The provided model was trained on LivoxDataset_v1.0 within 1w pointcloud sequence.
+
+## News
+`2020.08.31` : livox_detection V1.0 released:100m*50m detction for single Livox lidars, run at least 90FPS on 2080Ti
+
+`2020.11.26` : livox_detection V1.1 released: Support 360 degree detection (200m * 100m) with Livox lidars, run at least 20FPS on 2080Ti
 
 ## Demo
-highway_scene:
-<div align="center"><img src="./data/highway_scene1.gif" width=90% /></div>
+<div align="center"><img src="./res/demo1.png" width=90% /></div>
 
-<div align="center"><img src="./data/highway_scene2.gif" width=90% /></div>
+<div align="center"><img src="./res/demo2.png" width=90% /></div>
 
-<div align="center"><img src="./data/highway_scene3.gif" width=90% /></div>
-
-urban_scene:
-<div align="center"><img src="./data/urban_scene1.gif" width=90% /></div>
-
-<div align="center"><img src="./data/urban_scene2.gif" width=90% /></div>
-
-<div align="center"><img src="./data/urban_scene3.gif" width=90% /></div>
+Video Demo: [demo1](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/github/Livox_detection1.1_demo1.mp4) 
+[demo2](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/github/Livox_detection1.1_demo2.mp4)
+[demo3](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/github/Livox_detection1.1_demo3.mp4)
 
 # Introduction
-Livox Detection is a robust,real time detection package for [*Livox LiDARs*](https://www.livoxtech.com/). The detector is designed for L3 and L4 autonomous driving. It can effectively detect within 100m under different vehicle speed conditions(`0~120km/h`). In addition, the detector can perform effective detection in different scenarios, such as high-speed scenes, structured urban road scenes, complex intersection scenes and some unstructured road scenes, etc. In addition, the detector is currently able to effectively detect 3D bounding boxes of five types of objects: `cars`, `trucks`, `bus`, `bimo` and `pedestrians`.
+Livox Detection is a robust,real time detection package for [*Livox LiDARs*](https://www.livoxtech.com/). The detector is designed for L3 and L4 autonomous driving. It can effectively detect within 200*100m range under different vehicle speed conditions(`0~120km/h`). In addition, the detector can perform effective detection in different scenarios, such as high-speed scenes, structured urban road scenes, complex intersection scenes and some unstructured road scenes, etc. In addition, the detector is currently able to effectively detect 3D bounding boxes of five types of objects: `cars`, `trucks`, `bus`, `bimo` and `pedestrians`.
 
 # Dependencies
 - `python3.6+`
@@ -39,38 +38,29 @@ $ mkdir build && cd build
 $ cmake -DCMAKE_BUILD_TYPE=Release ..
 $ make
 ```
-4. Copy the `lib_cpp.so` to root directory:
+4. copy the `lib_cpp.so` to root directory:
 ```bash
 $ cp lib_cpp.so ../../../
 ```
-5. Download the [pre_trained model](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Showcase/model.zip) and unzip it to the root directory.
+
+5. Download the [pre_trained model](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/github/Livox_detection1.1_model.zip) and unzip it to the root directory.
 
 # Run
 
-### 1. For single frame detection
+### For sequence frame detection
 
-For single frame data testing, the single-frame point cloud data can be stored in any format, such as csv, txt, pcd, bin, etc., but it is necessary to ensure that each frame of data contains at least the x, y, and z coordinates of the current frame of 3D point cloud.
-
-We provide a frame of independent point cloud file in csv format for test instructions, in the `data` directory. Run directly:
-```bash
-$ python test.py
-```
-Then you can get a `res.txt` file of the detection results, each line of a detection object contains detection class, 8 corner coordinates of its bounding box and its confidence score.
-
-For testing your own data, you need to change the file path to be loaded on line 166 in the `test.py` file to your own file path. In addition, for point cloud files of different formats, you need to change the point cloud analysis method in the `data2voxel` function on line 141 and modify it to the corresponding analysis method.
-
-### 2. For sequence frame detection
-
-Download the provided rosbags : [highwayscene1](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Showcase/highwayscene1.bag), [highwayscene2](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Showcase/highwayscene2.bag),[highwayscene3](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Showcase/highwayscene3.bag), [urban_scene](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Showcase/urban_scene.bag), and then
+Download the provided rosbags : [rosbag](https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/github/livox_detection_v1.1_data.zip) and then
 
 ```bash
 $ roscore
+
+$ rviz -d ./config/show.rviz
 
 $ python livox_rosdetection.py
 
 $ rosbag play *.bag -r 0.1
 ```
-The network inference time is around `11ms`, but the point cloud data preprocessing module takes a lot of time based on python. If you want to get a faster real time detection demo, you can modify the point cloud data preprocessing module with c++.
+The network inference time is around `24ms`, but the point cloud data preprocessing module takes a lot of time based on python. If you want to get a faster real time detection demo, you can modify the point cloud data preprocessing module with c++.
 
 To play with your own rosbag, please change your rosbag topic to `/livox/lidar`.
 

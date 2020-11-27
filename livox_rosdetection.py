@@ -22,12 +22,27 @@ mnum = 0
 marker_array = MarkerArray()
 marker_array_text = MarkerArray()
 
-# voxel size: Related to detection range
-nh = round((cfg.RANGE['X_MAX']-cfg.RANGE['X_MIN']) / cfg.VOXEL_SIZE[0])
-nw = round((cfg.RANGE['Y_MAX']-cfg.RANGE['Y_MIN']) / cfg.VOXEL_SIZE[1])
-nz = round((cfg.RANGE['Z_MAX']-cfg.RANGE['Z_MIN']) / cfg.VOXEL_SIZE[2])
+DX = cfg.VOXEL_SIZE[0]
+DY = cfg.VOXEL_SIZE[1]
+DZ = cfg.VOXEL_SIZE[2]
 
-print(nh, nw, nz)
+X_MIN = cfg.RANGE['X_MIN']
+X_MAX = cfg.RANGE['X_MAX']
+
+Y_MIN = cfg.RANGE['Y_MIN']
+Y_MAX = cfg.RANGE['Y_MAX']
+
+Z_MIN = cfg.RANGE['Z_MIN']
+Z_MAX = cfg.RANGE['Z_MAX']
+
+overlap = cfg.OVERLAP
+HEIGHT = round((X_MAX - X_MIN+2*overlap) / DX)
+WIDTH = round((Y_MAX - Y_MIN) / DY)
+CHANNELS = round((Z_MAX - Z_MIN) / DZ)
+
+
+
+print(HEIGHT, WIDTH, CHANNELS)
 
 T1 = np.array([[0.0, -1.0, 0.0, 0.0],
                [0.0, 0.0, -1.0, 0.0],
@@ -40,16 +55,12 @@ lines = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6],
 
 class Detector(object):
     def __init__(self, *, nms_threshold=0.1, weight_file=None):
-        self.nx = int(cfg.RANGE['X_MAX']/cfg.VOXEL_SIZE[0]+0.5)
-        self.ny = int(
-            (cfg.RANGE['Y_MAX']-cfg.RANGE['Y_MIN'])/cfg.VOXEL_SIZE[1]+0.5)
-        self.net = livox_model(self.nx, self.ny)
+        self.net = livox_model(HEIGHT, WIDTH, CHANNELS)
         with tf.Graph().as_default():
             with tf.device('/gpu:'+str(cfg.GPU_INDEX)):
-                input_bev_img_pl, label_gt_total_channels = \
+                input_bev_img_pl = \
                     self.net.placeholder_inputs(cfg.BATCH_SIZE)
-                end_points = self.net.get_model(input_bev_img_pl,
-                                                label_gt_total_channels)
+                end_points = self.net.get_model(input_bev_img_pl)
 
                 saver = tf.train.Saver()
                 config = tf.ConfigProto()
@@ -100,28 +111,29 @@ class Detector(object):
         corners_3d = np.transpose(corners_3d)
         return corners_3d
 
-    def data2voxel(self, datapath):
-        dw = cfg.VOXEL_SIZE[1]
-        dh = cfg.VOXEL_SIZE[0]
-        dz = cfg.VOXEL_SIZE[2]
+    def data2voxel(self, pclist):
 
-        offw = -cfg.RANGE['Y_MIN']
-        offh = -cfg.RANGE['X_MIN']
-        offz = -cfg.RANGE['Z_MIN']
+        data = [i*0 for i in range(HEIGHT*WIDTH*CHANNELS)]
 
-        data = [i*0 for i in range(nh*nw*nz)]
-        for line in datapath:
-            Z = float(line[0])
-            X = -1.0*float(line[1])
-            Y = -1.0*float(line[2])
-            if(X > cfg.RANGE['Y_MIN'] and X < cfg.RANGE['Y_MAX'] and
-               Z > cfg.RANGE['X_MIN'] and Z < cfg.RANGE['X_MAX'] and
-               Y > cfg.RANGE['Z_MIN'] and Y < cfg.RANGE['Z_MAX']):
-                pixel_y = int(Z/dh)
-                pixel_x = int(X/dw+offw/dw)
-                channel = int(Y/dz+offz/dz)
-                data[pixel_y*224*30+pixel_x*30+channel] = 1
-        voxel = np.reshape(data, (nh, nw, nz))
+        for line in pclist:
+            X = float(line[0])
+            Y = float(line[1])
+            Z = float(line[2])
+            if( Y > Y_MIN and Y < Y_MAX and
+                X > X_MIN and X < X_MAX and
+                Z > Z_MIN and Z < Z_MAX):
+                channel = int((-Z + Z_MAX)/DZ)
+                if abs(X)<3 and abs(Y)<3:
+                    continue
+                if (X > -overlap):
+                    pixel_x = int((X - X_MIN + 2*overlap)/DX)
+                    pixel_y = int((-Y + Y_MAX)/DY)
+                    data[pixel_x*WIDTH*CHANNELS+pixel_y*CHANNELS+channel] = 1
+                if (X < overlap):
+                    pixel_x = int((-X + overlap)/DX)
+                    pixel_y = int((Y + Y_MAX)/DY)
+                    data[pixel_x*WIDTH*CHANNELS+pixel_y*CHANNELS+channel] = 1
+        voxel = np.reshape(data, (HEIGHT, WIDTH, CHANNELS))
         return voxel
 
     def detect(self, batch_bev_img):
@@ -129,25 +141,26 @@ class Detector(object):
         feature_out,\
             = self.sess.run([self.ops['end_points']['feature_out'],
                              ], feed_dict=feed_dict)
-        result = lib_cpp.cal_result_single(feature_out[0, :, :, :],
-                                           cfg.BOX_THRESHOLD, nh, nw, cfg.VOXEL_SIZE[0], cfg.VOXEL_SIZE[1], cfg.VOXEL_SIZE[2], cfg.NMS_THRESHOLD)
+        result = lib_cpp.cal_result(feature_out[0,:,:,:], \
+                                    cfg.BOX_THRESHOLD,overlap,X_MIN,HEIGHT, WIDTH, cfg.VOXEL_SIZE[0], cfg.VOXEL_SIZE[1], cfg.VOXEL_SIZE[2], cfg.NMS_THRESHOLD)
         is_obj_list = result[:, 0].tolist()
-        reg_theta_list = result[:, 2].tolist()
+        
         reg_m_x_list = result[:, 5].tolist()
-        reg_m_y_list = result[:, 6].tolist()
         reg_w_list = result[:, 4].tolist()
         reg_l_list = result[:, 3].tolist()
         obj_cls_list = result[:, 1].tolist()
+        reg_m_y_list = result[:, 6].tolist()
+        reg_theta_list = result[:, 2].tolist()
+        reg_m_z_list = result[:, 8].tolist()
+        reg_h_list = result[:, 7].tolist()
 
-        reg_m_z_list = result[:, 7].tolist()
-        reg_h_list = result[:, 8].tolist()
         results = []
         for i in range(len(is_obj_list)):
             box3d_pts_3d = np.ones((8, 4), float)
-            box3d_pts_3d[:, 0:3] = self.get_3d_box(
-                (reg_l_list[i], reg_w_list[i], reg_h_list[i]),
-                reg_theta_list[i], (reg_m_x_list[i], reg_m_z_list[i]+3.8-reg_h_list[i], reg_m_y_list[i]))
-            box3d_pts_3d = np.dot(np.linalg.inv(T1), box3d_pts_3d.T).T
+            box3d_pts_3d[:, 0:3] = self.get_3d_box( \
+                (reg_l_list[i], reg_w_list[i], reg_h_list[i]), \
+                reg_theta_list[i], (reg_m_x_list[i], reg_m_z_list[i], reg_m_y_list[i]))
+            box3d_pts_3d = np.dot(np.linalg.inv(T1), box3d_pts_3d.T).T  # n*4
             if int(obj_cls_list[i]) == 0:
                 cls_name = "car"
             elif int(obj_cls_list[i]) == 1:
@@ -177,11 +190,10 @@ class Detector(object):
         for point in pcl2.read_points(msg, skip_nans=True, field_names=("x", "y", "z", "intensity")):
             if point[0] == 0 and point[1] == 0 and point[2] == 0:
                 continue
-            if point[0] < 2.0 and np.abs(point[1]) < 1.5:
+            if np.abs(point[0]) < 2.0 and np.abs(point[1]) < 1.5:
                 continue
             points_list.append(point)
         points_list = np.asarray(points_list)
-        points_list[:,2] -= 1.9 #此处将地面高度修正到-1.9m处
         pointcloud_msg = pcl2.create_cloud_xyz32(header, points_list[:, 0:3])
         vox = self.data2voxel(points_list)
         vox = np.expand_dims(vox, axis=0)
@@ -193,7 +205,7 @@ class Detector(object):
         for ii in range(len(result)):
             result[ii][1:9] = list(np.array(result[ii][1:9]))
             result[ii][9:17] = list(np.array(result[ii][9:17]))
-            result[ii][17:25] = list(np.array(result[ii][17:25])+2)
+            result[ii][17:25] = list(np.array(result[ii][17:25]))
         boxes = result
         marker_array.markers.clear()
         marker_array_text.markers.clear()
@@ -214,9 +226,9 @@ class Detector(object):
 
             marker.lifetime = rospy.Duration(0)
 
-            marker.color.r = 0
-            marker.color.g = 1
-            marker.color.b = 1
+            marker.color.r = 1
+            marker.color.g = 0
+            marker.color.b = 0
 
             marker.color.a = 1
             marker.scale.x = 0.2
@@ -283,12 +295,12 @@ class Detector(object):
 
                 marker1.lifetime = rospy.Duration(0.01)
                 marker1.color.a = 0
-                marker1.text = ''
+                marker1.text = 'aaa'
                 marker_array_text.markers.append(marker1)
         mnum = len(boxes)
         self.marker_pub.publish(marker_array)
-        self.marker_text_pub.publish(marker_array_text)
         self.pointcloud_pub.publish(pointcloud_msg)
+        self.marker_text_pub.publish(marker_array_text)
 
 
 if __name__ == '__main__':

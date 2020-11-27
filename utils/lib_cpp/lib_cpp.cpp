@@ -32,10 +32,10 @@ struct box{
   float ry;
   float l;
   float w;
+  float h;
   float x;
   float z;
-  float h;
-  float dh;
+  float y;
   int cls_num;
   float is_obj;
   float wx0;
@@ -80,6 +80,56 @@ void compute_4_points(vector<box> &boxes)
   }
 
 }
+
+Polygon toPolygon_py(double ry,double l,double w,double x,double z) 
+{
+    using namespace boost::numeric::ublas;
+    using namespace boost::geometry;
+    matrix<double> mref(2, 2);
+    mref(0, 0) = cos(ry); mref(0, 1) = sin(ry);
+    mref(1, 0) = -sin(ry); mref(1, 1) = cos(ry);
+
+    static int count = 0;
+    matrix<double> corners(2, 4);
+    double data[] = {l / 2, l / 2, -l / 2, -l / 2,
+                     w / 2, -w / 2, -w / 2, w / 2};
+    std::copy(data, data + 8, corners.data().begin());
+    matrix<double> gc = prod(mref, corners);
+    for (int i = 0; i < 4; ++i) {
+        gc(0, i) += x;
+        gc(1, i) += z;
+    }
+
+    double points[][2] = {{gc(0, 0), gc(1, 0)},{gc(0, 1), gc(1, 1)},{gc(0, 2), gc(1, 2)},{gc(0, 3), gc(1, 3)},{gc(0, 0), gc(1, 0)}};
+    Polygon poly;
+    append(poly, points);
+    return poly;
+}
+double groundBoxOverlap_py(double ry1,double l1,double w1,double x1,double z1,\
+  double ry2,double l2,double w2,double x2,double z2, int criterion = -1)
+{
+  using namespace boost::geometry;
+  Polygon gp = toPolygon_py(ry1,l1,w1,x1,z1);
+  Polygon dp = toPolygon_py(ry2,l2,w2,x2,z2);
+
+  std::vector<Polygon> in, un;
+  intersection(gp, dp, in);
+  union_(gp, dp, un);
+
+  double inter_area = in.empty() ? 0 : area(in.front());
+  double union_area = area(un.front());
+  double o;
+  if(criterion==-1)     // union
+      o = inter_area / union_area;
+  else if(criterion==0) // bbox_a
+      o = inter_area / area(dp);
+  else if(criterion==1) // bbox_b
+      o = inter_area / area(gp);
+
+  return o;
+}
+
+
 Polygon toPolygon(box a) 
 {
     using namespace boost::numeric::ublas;
@@ -119,17 +169,15 @@ float compute_iou_ground(box a,box b, int criterion = -1)
   double inter_area = in.empty() ? 0 : area(in.front());
   double union_area = area(un.front());
   double o;
-  if(criterion==-1)
+  if(criterion==-1)     // union
       o = inter_area / union_area;
-  else if(criterion==0)
+  else if(criterion==0) // bbox_a
       o = inter_area / area(dp);
-  else if(criterion==1)
+  else if(criterion==1) // bbox_b
       o = inter_area / area(gp);
 
   return o;
 }
-
-
 
 
 float compute_iou_rect(box rectA,box rectB)
@@ -154,7 +202,6 @@ float compute_iou_rect(box rectA,box rectB)
 	float areaA = (xa1-xa0) * (ya1-ya0);
 	float areaB = (xb1-xb0) * (yb1-yb0);
 	float intersectionPercent = intersection / (areaA + areaB - intersection);
- 
 	return intersectionPercent;
 }
 
@@ -189,6 +236,7 @@ void nms2(
     {
         idxs.insert(std::pair<float, size_t>(scores[i], i));
     }
+
     while (idxs.size() > 0)
     {
         auto lastElem = --std::end(idxs);
@@ -201,15 +249,22 @@ void nms2(
         idxs.erase(lastElem);
 
         for (auto pos = std::begin(idxs); pos != std::end(idxs); )
-        {
+        { 
             box rect2 = srcRects[pos->second];
-
+            float distance2 = (rect1.x-rect2.x)*(rect1.x-rect2.x)\
+              +(rect1.z-rect2.z)*(rect1.z-rect2.z);
+            if(distance2>15*15)
+            {
+              ++pos;
+              continue;
+            }
+            
             float overlap=0;
-            if(0)
+            if((abs(rect1.ry)<70.0*3.14158/180 && abs(rect1.ry)>20.0*3.14158/180) || \
+              (abs(rect2.ry)<70.0*3.14158/180 && abs(rect2.ry)>20.0*3.14158/180))
             {
               overlap  = compute_iou_ground(rect1,rect2);
             }
-            else
             {
               overlap  = compute_iou_rect(rect1,rect2);
             }
@@ -232,49 +287,121 @@ void nms2(
     }
 }
 
-py::array_t<float> cal_result_single(py::array_t<float> &feature_out,\
-  float obj_th,int img_height,int img_width,float DX,float DY,float DZ,\
+py::array_t<float> cal_result(py::array_t<float> &feature_out,\
+  float obj_th,float OVERLAP,float Z_MIN, int img_height,int img_width,float DX,float DY,float DZ,\
   float nms_th)
 {
 
   auto feature_map = feature_out.unchecked<3>();
 
-  int feature_height = img_height/8;
-  int feature_width = img_width/8;
-  int grid_height = img_height/feature_height;
-  int grid_width = img_width/feature_width;
+  int feature_height = img_height/8+0.5;
+  int feature_width = img_width/8+0.5;
+  int grid_height = img_height/feature_height+0.5;
+  int grid_width = img_width/feature_width+0.5;
 
   std::vector<box> objs;
   std::vector<float> scores;
   objs.clear();
   scores.clear();
 
+  float cut_dis = OVERLAP-Z_MIN;
+
   for(int height_i=0;height_i<feature_height;height_i++)
   {
     for(int width_i=0;width_i<feature_width;width_i++)
     {
       float is_obj = sigmoid(feature_map(height_i,width_i,0));
-      if(is_obj>obj_th)
+      
+      float reg_dy = feature_map(height_i,width_i,13);
+      reg_dy = reg_dy*grid_height;
+      float center_y = height_i*grid_height+reg_dy;
+      float m_y = (center_y*DY);
+      float reg_dx = feature_map(height_i,width_i,11);
+      reg_dx = reg_dx*grid_width;
+      float center_x = width_i*grid_width+reg_dx;
+      float m_x = (center_x-img_width/2)*DX;
+      float sin_theta = feature_map(height_i,width_i,7);
+      float cos_theta = feature_map(height_i,width_i,9);
+      float theta = atan2(sin_theta,cos_theta)/2;
+      float reg_ln_l = feature_map(height_i,width_i,17);
+      float reg_l = exp(reg_ln_l);
+      float reg_ln_h = feature_map(height_i,width_i,21);
+      float reg_h = exp(reg_ln_h);
+      if(m_y>cut_dis)
+      {
+        m_y=m_y-cut_dis-OVERLAP;
+        if(m_y-reg_l/2<-10)
+          is_obj*=0.2;
+      }
+      else
+      {
+        m_x*=-1;
+        m_y=-1*(m_y-OVERLAP);
+        if(m_y+reg_l/2>10)
+          is_obj*=0.2;
+      }
+
+      if(m_y>100 && abs(theta)<45*3.14158/180)
+      {
+        is_obj*=0.2;
+      }
+
+      float m_obj_th = obj_th;
+      if(m_y>100)
+        m_obj_th=obj_th*0.5;
+      if(m_y>150)
+        m_obj_th=obj_th*0.4;
+      if(m_y>180)
+        m_obj_th=obj_th*0.3;
+
+      if(is_obj>m_obj_th)
       {
         int cls_num=0;
-        float is_cls0=feature_map(height_i,width_i,1);
-        float is_cls1=feature_map(height_i,width_i,2);
-        float is_cls2=feature_map(height_i,width_i,3);
-        float is_cls3=feature_map(height_i,width_i,4);
-        float is_cls4=feature_map(height_i,width_i,5);
-        if(is_cls0>is_cls1 && is_cls0>is_cls2 && is_cls0>is_cls3 && is_cls0>is_cls4)
+        float is_cls0=feature_map(height_i,width_i,2);
+        float is_cls1=feature_map(height_i,width_i,3);
+        float is_cls2=feature_map(height_i,width_i,4);
+        float reg_ln_w = feature_map(height_i,width_i,15);
+        float reg_w = exp(reg_ln_w);
+        float m_z = feature_map(height_i,width_i,19);   
+        if(is_cls0>is_cls1 && is_cls0>is_cls2)
         {
           cls_num = 0;
         }
-        else if(is_cls1>is_cls0 && is_cls1>is_cls2 && is_cls1>is_cls3 && is_cls1>is_cls4)
+        else if(is_cls1>is_cls0 && is_cls1>is_cls2)
         {
           cls_num = 1;
+          if (is_obj<0.88 && m_y<100 && abs(m_x)<40 && abs(m_x)>5 && m_y>10)
+            continue;
         }
-        else if(is_cls2>is_cls0 && is_cls2>is_cls1 && is_cls2>is_cls3 && is_cls2>is_cls4)
+        else
         {
           cls_num = 2;
+          if (is_obj<0.88 && m_y<100 && abs(m_x)<40 && abs(m_x)>5 && m_y>10)
+            continue;
         }
-        else if(is_cls3>is_cls0 && is_cls3>is_cls1 && is_cls3>is_cls2 && is_cls3>is_cls4)
+        box one_obj;
+        one_obj.ry = theta;
+        one_obj.l = reg_l;
+        one_obj.w = reg_w;
+        one_obj.x = m_x;
+        one_obj.z = m_y;
+        one_obj.cls_num=cls_num;
+        one_obj.is_obj=is_obj;
+        one_obj.h = reg_h;
+        one_obj.y = m_z;
+        objs.push_back(one_obj);
+
+        scores.push_back(is_obj);
+
+      }
+
+      is_obj= sigmoid(feature_map(height_i,width_i,1));
+      if(is_obj>obj_th)
+      {
+        int cls_num=0;
+        float is_cls3=feature_map(height_i,width_i,5);
+        float is_cls4=feature_map(height_i,width_i,6);
+        if(is_cls3>is_cls4)
         {
           cls_num = 3;
         }
@@ -282,15 +409,15 @@ py::array_t<float> cal_result_single(py::array_t<float> &feature_out,\
         {
           cls_num = 4;
         }
-
-        float sin_theta = feature_map(height_i,width_i,6);
-        float cos_theta = feature_map(height_i,width_i,7);
-        float reg_dx = feature_map(height_i,width_i,8);
-        float reg_dy = feature_map(height_i,width_i,9);
-        float reg_ln_w = feature_map(height_i,width_i,10);
-        float reg_ln_l = feature_map(height_i,width_i,11);
-
         
+        float sin_theta = feature_map(height_i,width_i,8);
+        float cos_theta = feature_map(height_i,width_i,10);
+        float reg_dx = feature_map(height_i,width_i,12);
+        float reg_dy = feature_map(height_i,width_i,14);
+        float reg_ln_w = feature_map(height_i,width_i,16);
+        float reg_ln_l = feature_map(height_i,width_i,18);
+        float m_z = feature_map(height_i,width_i,20);
+        float reg_ln_h = feature_map(height_i,width_i,22);
         float theta = atan2(sin_theta,cos_theta)/2;
         reg_dx = reg_dx*grid_width;
         reg_dy = reg_dy*grid_height;
@@ -300,12 +427,18 @@ py::array_t<float> cal_result_single(py::array_t<float> &feature_out,\
         float m_y = (center_y*DY);
         float reg_w = exp(reg_ln_w);
         float reg_l = exp(reg_ln_l);
-
-
-        float reg_ln_h = feature_map(height_i,width_i,13);
-        float reg_dh = feature_map(height_i,width_i,12);
         float reg_h = exp(reg_ln_h);
-        float m_h = (reg_dh);
+
+        if(m_y>cut_dis)
+        {
+          m_y=m_y-cut_dis-OVERLAP;
+        }
+        else
+        {
+          m_x*=-1;
+          m_y=-1*(m_y-OVERLAP);
+        }
+   
 
         box one_obj;
         one_obj.ry = theta;
@@ -315,22 +448,22 @@ py::array_t<float> cal_result_single(py::array_t<float> &feature_out,\
         one_obj.z = m_y;
         one_obj.cls_num=cls_num;
         one_obj.is_obj=is_obj;
-
-        one_obj.h = m_h;
-        one_obj.dh = reg_h;
+        one_obj.h = reg_h;
+        one_obj.y = m_z;
         objs.push_back(one_obj);
 
         scores.push_back(is_obj);
 
       }
-
     }
   }
 
   std::vector<box> results;
   compute_4_points(objs);
   nms2(objs,scores,results,nms_th);
+
   int obj_num = results.size();
+
   auto result = py::array_t<float>(obj_num*9);
   result.resize({obj_num,9});
   py::buffer_info buf_result = result.request();
@@ -346,20 +479,23 @@ py::array_t<float> cal_result_single(py::array_t<float> &feature_out,\
     ptr_result[i*9 + 5] = results[i].x;
     ptr_result[i*9 + 6] = results[i].z;
     ptr_result[i*9 + 7] = results[i].h;
-    ptr_result[i*9 + 8] = results[i].dh;
+    ptr_result[i*9 + 8] = results[i].y;
   }
 
   return result;
 }
 
-
-
 PYBIND11_MODULE(lib_cpp, m) 
 {
-    m.def("cal_result_single", &cal_result_single);
+    m.def("cal_result", &cal_result);
 }
 
+
+
+
 int32_t main() {
+
+
   return 0;
 }
 

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(devkit_object)
 
+set(CMAKE_BUILD_TYPE "Release")
 find_package(Boost)
 IF (Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIR})
