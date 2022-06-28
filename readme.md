@@ -38,6 +38,13 @@ $ mkdir build && cd build
 $ cmake -DCMAKE_BUILD_TYPE=Release ..
 $ make
 ```
+    If you have multiple installations of python, such as pyenv, run the following command.
+```bash
+$ which python
+{PythonPATH} # e.g. {PythonPATH} = /home/yuki/.pyenv/shims/python
+$ cmake -DCMAKE_BUILD_TYPE=Release -DPYTHON_EXECUTABLE={PythonPATH} ..
+```
+
 4. copy the `lib_cpp.so` to root directory:
 ```bash
 $ cp lib_cpp.so ../../../
