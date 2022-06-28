@@ -41,7 +41,7 @@ $ make
 - If you have multiple installations of python, such as pyenv, run the following command.
 ```bash
 $ which python
-{PythonPATH} # e.g. {PythonPATH} = /home/yuki/.pyenv/shims/python
+{PythonPATH} # e.g. {PythonPATH} = /home/{user}/.pyenv/shims/python
 $ cmake -DCMAKE_BUILD_TYPE=Release -DPYTHON_EXECUTABLE={PythonPATH} ..
 ```
 
