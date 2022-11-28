@@ -93,6 +93,7 @@ def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
 
     parser.add_argument('--pt', type=str, default=None, help='checkpoint to start from')
+    parser.add_argument('--subscribe', type=str, default='/livox/lidar', help='subscribe topic')
 
     args = parser.parse_args()
     return args
@@ -184,7 +185,7 @@ if __name__ == '__main__':
 
     demo_ros = ros_demo(model, args)
     sub = rospy.Subscriber(
-        "/livox/lidar", PointCloud2, queue_size=10, callback=demo_ros.online_inference)
+        args.subscribe, PointCloud2, queue_size=10, callback=demo_ros.online_inference)
     print("set up subscriber!")
 
     rospy.spin()
