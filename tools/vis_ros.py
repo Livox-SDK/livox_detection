@@ -95,6 +95,7 @@ def boxes_to_corners_3d(boxes3d):
 
 class ROS_MODULE:
     def __init__(self):
+        # label-1:index
         self.class_names = ['Vehicle', 'Pedestrian', 'Cyclist'] 
         
         # ros config
@@ -212,6 +213,9 @@ class ROS_MODULE:
             score = pred_dicts[0]['pred_scores']
             label = pred_dicts[0]['pred_labels']
             # print('corner points \n', pts)
+            print('boxes \n', pred_dicts[0]['pred_boxes'])
+            print('scores \n', pred_dicts[0]['pred_scores'])
+            print('labels \n', pred_dicts[0]['pred_labels']-1)
 
             marker_array.markers.clear()
             marker_array_text.markers.clear()
