@@ -16,8 +16,9 @@ from geometry_msgs.msg import Point
 import sensor_msgs.point_cloud2 as pcl2
 from sensor_msgs.msg import PointCloud2, PointField
 from visualization_msgs.msg import Marker
-from visualization_msgs.msg import MarkerArray 
+from visualization_msgs.msg import MarkerArray
 import ros_numpy
+import pandas as pd
 
 # ros marker
 gtbox_array = MarkerArray()
@@ -34,14 +35,15 @@ marker_array_text = MarkerArray()
       2 -------- 1
 """
 
-lines = [[0, 1], [1, 2], [2, 3], [3, 0], 
-        [4, 5], [5, 6], [6, 7], [7, 4],
-        [0, 4], [1, 5], [2, 6], [3, 7]]
+lines = [[0, 1], [1, 2], [2, 3], [3, 0],
+         [4, 5], [5, 6], [6, 7], [7, 4],
+         [0, 4], [1, 5], [2, 6], [3, 7]]
 
-color_maps = {'car': [0, 1, 1], 'Car' : [0, 1, 1], 'truck': [0, 1, 1], 'Vehicle': [0, 1, 1], 'construction_vehicle': [0, 1, 1], 'bus': [0, 1, 1], 'trailer': [0, 1, 1],
-        'motorcycle': [0, 1, 0], 'bicycle': [0, 1, 0], 'Cyclist': [0, 1, 0],
-        'Pedestrian': [1, 1, 0], 'pedestrian': [1, 1, 0], 
-        'barrier' : [1, 1, 1], 'traffic_cone': [1, 1, 1]}
+color_maps = {'car': [0, 1, 1], 'Car': [0, 1, 1], 'truck': [0, 1, 1], 'Vehicle': [0, 1, 1], 'construction_vehicle': [0, 1, 1], 'bus': [0, 1, 1], 'trailer': [0, 1, 1],
+              'motorcycle': [0, 1, 0], 'bicycle': [0, 1, 0], 'Cyclist': [0, 1, 0],
+              'Pedestrian': [1, 1, 0], 'pedestrian': [1, 1, 0],
+              'barrier': [1, 1, 1], 'traffic_cone': [1, 1, 1]}
+
 
 def check_numpy_to_torch(x):
     if isinstance(x, np.ndarray):
@@ -73,6 +75,7 @@ def rotate_points_along_z(points, angle):
     points_rot = torch.cat((points_rot, points[:, :, 3:]), dim=-1)
     return points_rot.numpy() if is_numpy else points_rot
 
+
 def boxes_to_corners_3d(boxes3d):
     """
     Args:
@@ -88,34 +91,38 @@ def boxes_to_corners_3d(boxes3d):
     )) / 2
 
     corners3d = boxes3d[:, None, 3:6].repeat(1, 8, 1) * template[None, :, :]
-    corners3d = rotate_points_along_z(corners3d.view(-1, 8, 3), boxes3d[:, 6]).view(-1, 8, 3)
+    corners3d = rotate_points_along_z(
+        corners3d.view(-1, 8, 3), boxes3d[:, 6]).view(-1, 8, 3)
     corners3d += boxes3d[:, None, 0:3]
 
     return corners3d.numpy() if is_numpy else corners3d
 
+
 class ROS_MODULE:
     def __init__(self):
         # label-1:index
-        self.class_names = ['Vehicle', 'Pedestrian', 'Cyclist'] 
-        
+        self.class_names = ['Vehicle', 'Pedestrian', 'Cyclist']
+
         # ros config
         rospy.init_node('ros_demo', anonymous=True)
 
         # create Publisher for visualization.
         self.pointcloud_pub = rospy.Publisher(
-                '/pointcloud', PointCloud2, queue_size=10
-                ) 
+            '/pointcloud', PointCloud2, queue_size=10
+        )
         self.gtbox_array_pub = rospy.Publisher(
-                '/detect_gtbox', MarkerArray, queue_size=10
-                )
+            '/detect_gtbox', MarkerArray, queue_size=10
+        )
         self.marker_pub = rospy.Publisher(
-                '/detect_box3d', MarkerArray, queue_size=10
-                )
+            '/detect_box3d', MarkerArray, queue_size=10
+        )
 
         self.marker_text_pub = rospy.Publisher(
-                '/text_det', MarkerArray, queue_size=10
-                )
-        self.pedestrian_cnt=0
+            '/text_det', MarkerArray, queue_size=10
+        )
+        self.pedestrian_cnt = 0
+        self.cnt = 0
+        self.df = pd.read_csv('center.csv')
 
     @staticmethod
     def gpu2cpu(data_dict, pred_dicts):
@@ -127,10 +134,11 @@ class ROS_MODULE:
         pred_dicts[0]['pred_labels'] = pred_dicts[0]['pred_labels'].cpu().numpy()
         torch.cuda.empty_cache()
         return data_dict, pred_dicts
- 
+
     def ros_print(self, pts, pred_dicts=None, last_box_num=None, gt_boxes=None, last_gtbox_num=None):
         def xyzr_to_pc2(pts, stamp, frame_id):
-            data = np.zeros(pts.shape[0], dtype=[('x', np.float32), ('y', np.float32), ('z', np.float32), ('intensity', np.float32)])
+            data = np.zeros(pts.shape[0], dtype=[
+                            ('x', np.float32), ('y', np.float32), ('z', np.float32), ('intensity', np.float32)])
             data['x'] = pts[:, 0]
             data['y'] = pts[:, 1]
             data['z'] = pts[:, 2]
@@ -147,13 +155,14 @@ class ROS_MODULE:
 
         # point cloud visualization
 
-        #import pandas as pd
-        #pts_des = pd.DataFrame(pts, columns=['batch_id', 'x', 'y', 'z', 'intensity'])
-        #print(pts_des.describe(include='all'))
-        
+        # import pandas as pd
+        # pts_des = pd.DataFrame(pts, columns=['batch_id', 'x', 'y', 'z', 'intensity'])
+        # print(pts_des.describe(include='all'))
+
         pointcloud_msg = xyzr_to_pc2(pts, header.stamp, header.frame_id)
         self.pointcloud_pub.publish(pointcloud_msg)
-        
+        self.cnt += 1
+
         # print(pointcloud_msg)
         # input()
 
@@ -161,7 +170,6 @@ class ROS_MODULE:
         # print("format of scores\n", pred_dicts[0]['pred_scores'][0])
         # print("format of labels\n", pred_dicts[0]['pred_labels'][0])
 
-                
         if gt_boxes is not None:
             gtbox_array.markers.clear()
             gt_boxes = boxes_to_corners_3d(gt_boxes)
@@ -184,17 +192,17 @@ class ROS_MODULE:
                 marker.color.b = 1
                 marker.color.a = 1
                 marker.scale.x = 0.05
-                
+
                 marker.points = []
                 for line in lines:
                     ptu = gt_boxes[obid][line[0]]
                     ptv = gt_boxes[obid][line[1]]
                     marker.points.append(Point(ptu[0], ptu[1], ptu[2]))
                     marker.points.append(Point(ptv[0], ptv[1], ptv[2]))
-                
+
                 gtbox_array.markers.append(marker)
 
-            # clear ros cache   
+            # clear ros cache
             if last_gtbox_num > gt_boxes.shape[0]:
                 for i in range(gt_boxes.shape[0], last_gtbox_num):
                     marker = Marker()
@@ -214,14 +222,36 @@ class ROS_MODULE:
             score = pred_dicts[0]['pred_scores']
             label = pred_dicts[0]['pred_labels']
             # print('corner points \n', pts)
-            print('boxes \n', pred_dicts[0]['pred_boxes'])
-            print('scores \n', pred_dicts[0]['pred_scores'])
-            print('labels \n', pred_dicts[0]['pred_labels']-1)
 
-            if 2 in label:
-                self.pedestrian_cnt += 1
+            boxes_p=pred_dicts[0]['pred_boxes']
+            print('boxes \n', boxes_p)
+            print('scores \n', score)
+            print('labels \n', label-1)
+
+            # if 2 in label:
+            #     self.pedestrian_cnt += 1
+
+            # labelに含まれる2のインデックスの取得
+            pedestrian_idx = np.where(label == 2)[0]
+            print('pedestrian_idx: ', pedestrian_idx)
+
+            # pedestrian_idxに対応するboxesを取得
+            infered_coord = boxes_p[0][pedestrian_idx][:3]
+            # print(boxes[pedestrian_idx])
+            print('infered_coord: ', infered_coord[0])
+
+            # dfのcnt行目の[:3](x,y,z)を取得
+            correct_coord = self.df.iloc[self.cnt, :3].values
+            print('correct_coord: ', correct_coord)
+
+            # pedestrian_boxesの各行の[:3](x,y,z)とcorrect_coordの[:3](x,y,z)の距離を計算
+            dist = np.linalg.norm(infered_coord - correct_coord, axis=1)
+            print('dist: ', dist)
+
+            #
+
             print('pedestrian_cnt: ', self.pedestrian_cnt)
-            
+
             marker_array.markers.clear()
             marker_array_text.markers.clear()
             for obid in range(boxes.shape[0]):
@@ -244,7 +274,7 @@ class ROS_MODULE:
                 marker.color.b = color[2]
                 marker.color.a = 0.8
                 marker.scale.x = 0.05
-                
+
                 marker.points = []
                 for line in lines:
                     ptu = boxes[obid][line[0]]
@@ -252,7 +282,7 @@ class ROS_MODULE:
                     marker.points.append(Point(ptu[0], ptu[1], ptu[2]))
                     marker.points.append(Point(ptv[0], ptv[1], ptv[2]))
                 marker_array.markers.append(marker)
-                
+
                 # confidence
                 markert = Marker()
                 markert.header.frame_id = header.frame_id
@@ -270,16 +300,20 @@ class ROS_MODULE:
                 markert.color.b = color[2]
                 markert.color.a = 1
                 markert.scale.z = 0.6
-               
+
                 markert.pose.orientation.w = 1.0
-                
-                markert.pose.position.x = (boxes[obid][0][0] + boxes[obid][2][0]) / 2
-                markert.pose.position.y = (boxes[obid][0][1] + boxes[obid][2][1]) / 2
-                markert.pose.position.z = (boxes[obid][0][2] + boxes[obid][4][2]) / 2 
-                markert.text = self.class_names[label[obid]-1] + ':' + str(np.floor(score[obid] * 100)/100)
+
+                markert.pose.position.x = (
+                    boxes[obid][0][0] + boxes[obid][2][0]) / 2
+                markert.pose.position.y = (
+                    boxes[obid][0][1] + boxes[obid][2][1]) / 2
+                markert.pose.position.z = (
+                    boxes[obid][0][2] + boxes[obid][4][2]) / 2
+                markert.text = self.class_names[label[obid]-1] + \
+                    ':' + str(np.floor(score[obid] * 100)/100)
                 marker_array_text.markers.append(markert)
 
-            # clear ros cache   
+            # clear ros cache
             if last_box_num > boxes.shape[0]:
                 for i in range(boxes.shape[0], last_box_num):
                     marker = Marker()
@@ -302,11 +336,10 @@ class ROS_MODULE:
                     markert.color.a = 0
                     marker_array_text.markers.append(markert)
 
-
             # publish
             self.marker_pub.publish(marker_array)
             self.marker_text_pub.publish(marker_array_text)
-        
+
         box_size = 0 if pred_dicts is None else boxes.shape[0]
         gtbox_size = 0 if gt_boxes is None else gt_boxes.shape[0]
 
