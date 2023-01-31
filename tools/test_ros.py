@@ -105,7 +105,7 @@ class ros_demo():
 
         self.offset_angle = 0
         self.offset_ground = 1.8 
-        self.point_cloud_range = [0, -44.8, -2, 224, 44.8, 4]
+        self.point_cloud_range = [0, -5.0, -2, 224, 5.0, 4]
 
     def receive_from_ros(self, msg):
         pc = ros_numpy.numpify(msg)
