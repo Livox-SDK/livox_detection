@@ -115,6 +115,7 @@ class ROS_MODULE:
         self.marker_text_pub = rospy.Publisher(
                 '/text_det', MarkerArray, queue_size=10
                 )
+        self.pedestrian_cnt=0
 
     @staticmethod
     def gpu2cpu(data_dict, pred_dicts):
@@ -217,6 +218,10 @@ class ROS_MODULE:
             print('scores \n', pred_dicts[0]['pred_scores'])
             print('labels \n', pred_dicts[0]['pred_labels']-1)
 
+            if 2 in label:
+                self.pedestrian_cnt += 1
+            print('pedestrian_cnt: ', self.pedestrian_cnt)
+            
             marker_array.markers.clear()
             marker_array_text.markers.clear()
             for obid in range(boxes.shape[0]):
