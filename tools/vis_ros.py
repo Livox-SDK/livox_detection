@@ -44,6 +44,8 @@ color_maps = {'car': [0, 1, 1], 'Car': [0, 1, 1], 'truck': [0, 1, 1], 'Vehicle':
               'Pedestrian': [1, 1, 0], 'pedestrian': [1, 1, 0],
               'barrier': [1, 1, 1], 'traffic_cone': [1, 1, 1]}
 
+ERROR_THRESHOLD=1.0
+
 
 def check_numpy_to_torch(x):
     if isinstance(x, np.ndarray):
@@ -223,32 +225,41 @@ class ROS_MODULE:
             label = pred_dicts[0]['pred_labels']
             # print('corner points \n', pts)
 
-            boxes_p=pred_dicts[0]['pred_boxes']
-            print('boxes \n', boxes_p)
-            print('scores \n', score)
-            print('labels \n', label-1)
+            boxes_p=pred_dicts[0]['pred_boxes'][:3]
+            # print(type(label))
+            print("---------------------")
+            # print('boxes \n', boxes_p)
+            # print('scores \n', score)
+            # print('labels \n', label)
 
             # if 2 in label:
             #     self.pedestrian_cnt += 1
 
-            # labelに含まれる2のインデックスの取得
-            pedestrian_idx = np.where(label == 2)[0]
-            print('pedestrian_idx: ', pedestrian_idx)
+            try:
+                pedestrian_idx = label.tolist().index(2)
+                # print('pedestrian_idx: ', pedestrian_idx)
 
-            # pedestrian_idxに対応するboxesを取得
-            infered_coord = boxes_p[0][pedestrian_idx][:3]
-            # print(boxes[pedestrian_idx])
-            print('infered_coord: ', infered_coord[0])
+                # pedestrian_idxに対応するboxesを取得
+                infered_coord = boxes_p[pedestrian_idx][:2]
+                # print(boxes[pedestrian_idx])
+                # print('infered_coord: ', infered_coord)
+                # print(type(infered_coord))
 
-            # dfのcnt行目の[:3](x,y,z)を取得
-            correct_coord = self.df.iloc[self.cnt, :3].values
-            print('correct_coord: ', correct_coord)
+                # dfのcnt行目の[:3](x,y,z)を取得
+                correct_coord = self.df.iloc[self.cnt, :2].values
+                # print('correct_coord: ', correct_coord)
+                # print(type(correct_coord))
 
-            # pedestrian_boxesの各行の[:3](x,y,z)とcorrect_coordの[:3](x,y,z)の距離を計算
-            dist = np.linalg.norm(infered_coord - correct_coord, axis=1)
-            print('dist: ', dist)
+                # infered_coord(x,y,z)とcorrect_coordの(x,y,z)の距離を計算
+                dist = np.linalg.norm(infered_coord - correct_coord)
+                print('dist: ', dist)
+                if dist < ERROR_THRESHOLD:
+                    self.pedestrian_cnt += 1
 
-            #
+            except ValueError:
+                pass
+            
+
 
             print('pedestrian_cnt: ', self.pedestrian_cnt)
 
