@@ -44,7 +44,8 @@ color_maps = {'car': [0, 1, 1], 'Car': [0, 1, 1], 'truck': [0, 1, 1], 'Vehicle':
               'Pedestrian': [1, 1, 0], 'pedestrian': [1, 1, 0],
               'barrier': [1, 1, 1], 'traffic_cone': [1, 1, 1]}
 
-ERROR_THRESHOLD=1.0
+ERROR_THRESHOLD = 2.0
+MIN_FRAME = 147
 
 
 def check_numpy_to_torch(x):
@@ -163,7 +164,6 @@ class ROS_MODULE:
 
         pointcloud_msg = xyzr_to_pc2(pts, header.stamp, header.frame_id)
         self.pointcloud_pub.publish(pointcloud_msg)
-        self.cnt += 1
 
         # print(pointcloud_msg)
         # input()
@@ -225,9 +225,11 @@ class ROS_MODULE:
             label = pred_dicts[0]['pred_labels']
             # print('corner points \n', pts)
 
-            boxes_p=pred_dicts[0]['pred_boxes'][:3]
+            boxes_p = pred_dicts[0]['pred_boxes'][:3]
             # print(type(label))
-            print("---------------------")
+            # print('cnt: ', self.cnt)
+            print('frame: ', self.cnt+MIN_FRAME)
+            # print('df.iloc[cnt]', self.df.iloc[self.cnt].values)
             # print('boxes \n', boxes_p)
             # print('scores \n', score)
             # print('labels \n', label)
@@ -241,25 +243,22 @@ class ROS_MODULE:
 
                 # pedestrian_idxに対応するboxesを取得
                 infered_coord = boxes_p[pedestrian_idx][:2]
-                # print(boxes[pedestrian_idx])
-                # print('infered_coord: ', infered_coord)
-                # print(type(infered_coord))
+                print('infered_coord: ', infered_coord)
+                # print(type(infered_coord)) -> np.ndarray
 
                 # dfのcnt行目の[:3](x,y,z)を取得
                 correct_coord = self.df.iloc[self.cnt, :2].values
-                # print('correct_coord: ', correct_coord)
-                # print(type(correct_coord))
+                print('correct_coord: ', correct_coord)
+                # print(type(correct_coord)) -> np.ndarray
 
                 # infered_coord(x,y,z)とcorrect_coordの(x,y,z)の距離を計算
                 dist = np.linalg.norm(infered_coord - correct_coord)
                 print('dist: ', dist)
-                if dist < ERROR_THRESHOLD:
+                if dist <= ERROR_THRESHOLD:
                     self.pedestrian_cnt += 1
 
             except ValueError:
                 pass
-            
-
 
             print('pedestrian_cnt: ', self.pedestrian_cnt)
 
@@ -353,6 +352,7 @@ class ROS_MODULE:
 
         box_size = 0 if pred_dicts is None else boxes.shape[0]
         gtbox_size = 0 if gt_boxes is None else gt_boxes.shape[0]
+        self.cnt += 1
 
         return box_size, gtbox_size
         # input()

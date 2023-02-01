@@ -167,6 +167,8 @@ class ros_demo():
             self.ender.record()
             torch.cuda.synchronize()
             curr_latency = self.starter.elapsed_time(self.ender)
+        
+        print('------------------------------------')
         print('det_time(ms): ', curr_latency)
         
         data_infer, pred_dicts = ROS_MODULE.gpu2cpu(data_infer, pred_dicts)
