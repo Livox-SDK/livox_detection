@@ -188,8 +188,8 @@ if __name__ == '__main__':
     demo_ros = ros_demo(model, args)
     sub = rospy.Subscriber(
         "/livox/lidar", PointCloud2, queue_size=10, callback=demo_ros.online_inference)
-    print(time.time())
+    print('*****************'+str(time.time())+'*******************')
     print("set up subscriber!")
 
     rospy.spin()
-    
+

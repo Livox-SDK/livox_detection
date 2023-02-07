@@ -45,7 +45,16 @@ color_maps = {'car': [0, 1, 1], 'Car': [0, 1, 1], 'truck': [0, 1, 1], 'Vehicle':
               'barrier': [1, 1, 1], 'traffic_cone': [1, 1, 1]}
 
 ERROR_THRESHOLD = 2.0
-MIN_FRAME = 147
+# MIN_FRAME = 147
+
+# score-denoiseで推論できたフレーム 217~268はバラバラ
+frame_list = [217, 219, 223, 225, 227, 229, 231, 233, 235, 237, 239, 241, 243, 245,
+              247, 249, 251, 253, 255, 256, 257, 258, 260, 261, 262, 263, 264, 265, 266, 267, 268]
+# 270~392は連続
+MIN_FRAME = 270
+MAX_FRAME = 392
+frame_list += list(range(MIN_FRAME, MAX_FRAME+1))
+
 
 
 def check_numpy_to_torch(x):
@@ -228,7 +237,7 @@ class ROS_MODULE:
             boxes_p = pred_dicts[0]['pred_boxes'][:3]
             # print(type(label))
             # print('cnt: ', self.cnt)
-            print('frame: ', self.cnt+MIN_FRAME)
+            print('frame: ', frame_list[self.cnt])
             # print('df.iloc[cnt]', self.df.iloc[self.cnt].values)
             # print('boxes \n', boxes_p)
             # print('scores \n', score)
