@@ -56,7 +56,6 @@ MAX_FRAME = 392
 frame_list += list(range(MIN_FRAME, MAX_FRAME+1))
 
 
-
 def check_numpy_to_torch(x):
     if isinstance(x, np.ndarray):
         return torch.from_numpy(x).float(), True
@@ -238,6 +237,7 @@ class ROS_MODULE:
             # print(type(label))
             # print('cnt: ', self.cnt)
             print('frame: ', frame_list[self.cnt])
+            
             # print('df.iloc[cnt]', self.df.iloc[self.cnt].values)
             # print('boxes \n', boxes_p)
             # print('scores \n', score)
@@ -246,7 +246,13 @@ class ROS_MODULE:
             # if 2 in label:
             #     self.pedestrian_cnt += 1
 
-            try:
+            # dfのcnt行目の[:3](x,y,z)を取得
+            correct_coord = self.df.iloc[self.cnt, :2].values
+            print('correct_coord: ', correct_coord)
+            # print(type(correct_coord)) -> np.ndarray
+
+            # try:
+            if 2 in label:
                 pedestrian_idx = label.tolist().index(2)
                 # print('pedestrian_idx: ', pedestrian_idx)
 
@@ -255,19 +261,14 @@ class ROS_MODULE:
                 print('infered_coord: ', infered_coord)
                 # print(type(infered_coord)) -> np.ndarray
 
-                # dfのcnt行目の[:3](x,y,z)を取得
-                correct_coord = self.df.iloc[self.cnt, :2].values
-                print('correct_coord: ', correct_coord)
-                # print(type(correct_coord)) -> np.ndarray
-
                 # infered_coord(x,y,z)とcorrect_coordの(x,y,z)の距離を計算
                 dist = np.linalg.norm(infered_coord - correct_coord)
                 print('dist: ', dist)
                 if dist <= ERROR_THRESHOLD:
                     self.pedestrian_cnt += 1
 
-            except ValueError:
-                pass
+            # except ValueError:
+            #     pass
 
             print('pedestrian_cnt: ', self.pedestrian_cnt)
 
